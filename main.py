@@ -1,6 +1,9 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 import uvicorn
+import random
+import asyncio
+import os
 
 app = FastAPI(
     title="HTTP Status Codes API",
@@ -17,6 +20,7 @@ async def root():
             "success": "/success/{code}",
             "error": "/error/{code}",
             "redirect": "/redirect/{code}",
+            "server-error": "/server-error/{type}",
         },
     }
 
@@ -94,5 +98,83 @@ async def redirect_codes(code: int):
     )
 
 
+def cause_division_error():
+    return random.choice([1, 2, 3]) / 0
+
+
+def cause_memory_error():
+    return [1] * (10**9)
+
+
+def cause_recursion_error():
+    return cause_recursion_error()
+
+
+def cause_type_error():
+    return "string" + 123
+
+
+def cause_key_error():
+    return {}["nonexistent"]
+
+
+def cause_index_error():
+    return [][0]
+
+
+def cause_attribute_error():
+    return None.nonexistent
+
+
+def cause_import_error():
+    return __import__("nonexistent_module")
+
+
+def cause_value_error():
+    return int("not a number")
+
+
+@app.get("/server-error/{type}")
+async def server_error(type: str):
+    error_handlers = {
+        "random": cause_division_error,
+        "memory": cause_memory_error,
+        "recursion": cause_recursion_error,
+        "type": cause_type_error,
+        "key": cause_key_error,
+        "index": cause_index_error,
+        "attribute": cause_attribute_error,
+        "import": cause_import_error,
+        "value": cause_value_error,
+    }
+
+    if type not in error_handlers:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid error type. Available types: {', '.join(error_handlers.keys())}",
+        )
+
+    try:
+        handler = error_handlers[type]
+        if asyncio.iscoroutinefunction(handler):
+            await handler()
+        else:
+            handler()
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": 500,
+                "error_type": type,
+                "message": f"Server error: {str(e)}",
+            },
+        )
+
+
+def main():
+    port = int(os.getenv("PORT", "8000"))
+    uvicorn.run(app, host="0.0.0.0", port=port)
+
+
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    main()
