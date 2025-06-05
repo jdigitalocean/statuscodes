@@ -1,5 +1,5 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, HTTPException, Response
+from fastapi.responses import JSONResponse, RedirectResponse
 import uvicorn
 import random
 import asyncio
@@ -30,9 +30,14 @@ async def success_codes(code: int):
     success_codes = [200, 201, 202, 203, 204, 205, 206]
     if code not in success_codes:
         raise HTTPException(status_code=400, detail="Invalid success status code")
+
+    if code == 204:
+        return Response(status_code=204, headers={"Cache-Control": "no-store"})
+
     return JSONResponse(
         status_code=code,
         content={"status": code, "message": f"Success status code {code}"},
+        headers={"Cache-Control": "no-store"},
     )
 
 
@@ -81,10 +86,17 @@ async def error_codes(code: int):
     ]
     if code not in error_codes:
         raise HTTPException(status_code=400, detail="Invalid error status code")
-    return JSONResponse(
+
+    response = JSONResponse(
         status_code=code,
         content={"status": code, "message": f"Error status code {code}"},
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
     )
+    return response
 
 
 @app.get("/redirect/{code}")
@@ -92,9 +104,12 @@ async def redirect_codes(code: int):
     redirect_codes = [300, 301, 302, 303, 304, 305, 306, 307, 308]
     if code not in redirect_codes:
         raise HTTPException(status_code=400, detail="Invalid redirect status code")
-    return JSONResponse(
-        status_code=code,
-        content={"status": code, "message": f"Redirect status code {code}"},
+
+    if code == 304:
+        return Response(status_code=304, headers={"Cache-Control": "no-store"})
+
+    return RedirectResponse(
+        url="/", status_code=code, headers={"Cache-Control": "no-store"}
     )
 
 
@@ -168,11 +183,16 @@ async def server_error(type: str):
                 "error_type": type,
                 "message": f"Server error: {str(e)}",
             },
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
         )
 
 
 def main():
-    port = int(os.getenv("PORT", "8080"))
+    port = int(os.getenv("PORT", "8000"))
     uvicorn.run(app, host="0.0.0.0", port=port)
 
 
